@@ -1,36 +1,85 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Resonant Inscapes (MVP)
 
-## Getting Started
+Prompt List共有プラットフォームです。  
+音楽のVA値 (Valence / Arousal) に対応した画像生成向け `tags / negativeTags / prompt` を作成・共有・ダウンロードできます。
+VA空間は 10×10 のグリッドで管理し、Prompt Listは基本的に 100 points で構成されます。
 
-First, run the development server:
+## Stack
+
+- Next.js App Router
+- TypeScript
+- Tailwind CSS
+- Supabase (`@supabase/supabase-js`)
+- OpenAI API (作成時のみ使用)
+
+## Setup
+
+1. 依存関係インストール
+
+```bash
+npm install
+```
+
+2. 環境変数を設定 (`.env.local`)
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+# 任意。API Route でRLSを回避するサーバー専用キー
+SUPABASE_SERVICE_ROLE_KEY=
+OPENAI_API_KEY=
+# 任意。未設定時は gpt-4o-mini
+OPENAI_MODEL=
+```
+
+- `OPENAI_API_KEY` はサーバー専用です (`NEXT_PUBLIC_` を付けない)。
+- `OPENAI_MODEL` で Chat Completions のモデルを上書きできます（例: `gpt-4o`）。
+- 未設定時は `/create` の生成で mock fallback が動作します。
+
+3. Supabase スキーマを実行
+
+- `supabase/schema.sql` を Supabase SQL Editor で実行してください。
+- `supabase/auth-profiles.sql` を実行すると、`auth.users` 作成時に `profiles` が自動作成されます（既存ユーザーのbackfill付き）。
+- さらに `supabase/rls-mvp.sql` を実行すると、MVP向けのRLSポリシーが有効になります。
+
+4. 開発サーバー起動
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Supabase Notes
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- `lib/supabase/client.ts`: ブラウザ向け client
+- `lib/promptLists.ts`: Prompt Listの取得・保存・download_count更新
+- 現在は Supabase 取得失敗時に mock fallback を使用します
+- 将来的に Auth / Storage を追加予定です
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Future Storage Buckets
 
-## Learn More
+- `prompt-list-thumbnails`
+- `prompt-list-samples`
+- `prompt-list-audio`
 
-To learn more about Next.js, take a look at the following resources:
+## OpenAI Generation
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- API Route: `POST /api/generate-prompt-list`
+- 役割: `/create` から4象限入力を受け取り、10x10 (100 points) のPrompt ListをJSONで生成
+- 4つのサンプル音源は、VA空間4象限の「核」を作るために使います
+- ChatGPT APIは、その核から周辺VA地点のプロンプトを予測・補間するために使います
+- 失敗時: `OpenAI generation failed. Using mock data.` を返してmock生成にフォールバック
+- 設計方針: LLMは作成時のみ使用し、リアルタイム再生時には保存済み100-point Prompt Listのみ参照します
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Sample Audio Placement
 
-## Deploy on Vercel
+4象限サンプル音声は以下に配置します。
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- `public/audio/samples/sample_hv_ha.mp3` (Joyful / Energetic)
+- `public/audio/samples/sample_hv_la.mp3` (Peaceful / Warm)
+- `public/audio/samples/sample_lv_ha.mp3` (Tense / Intense)
+- `public/audio/samples/sample_lv_la.mp3` (Lonely / Quiet)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+注意:
+
+- 現時点では音声ファイル本体は未配置でOKです
+- 後から同名ファイルを `public/audio/samples/` に置けば `/create` のaudio playerで再生できます
