@@ -234,3 +234,28 @@ export async function incrementDownloadCount(id: string) {
     console.error("incrementDownloadCount update failed:", updateError);
   }
 }
+
+export async function publishPromptList(id: string, authorId: string): Promise<boolean> {
+  const supabase = getSupabaseForMutation();
+  if (!supabase) {
+    throw new Error("Supabase is not configured.");
+  }
+  if (!id || !authorId) {
+    throw new Error("Missing publish parameters.");
+  }
+
+  const { data, error } = await supabase
+    .from("prompt_lists")
+    .update({ visibility: "public", updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("author_id", authorId)
+    .eq("visibility", "draft")
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return Boolean(data?.id);
+}
