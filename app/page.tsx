@@ -3,6 +3,8 @@ import DiscoverCreatedSection from "@/components/DiscoverCreatedSection";
 import { promptLists as mockPromptLists } from "@/lib/mock-data";
 import { getPublicPromptLists } from "@/lib/promptLists";
 
+export const dynamic = "force-dynamic";
+
 export default async function Home() {
   let lists = mockPromptLists;
   try {
