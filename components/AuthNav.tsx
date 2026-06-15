@@ -17,11 +17,11 @@ export default function AuthNav() {
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) {
-      setAuth({ email: null, loading: false });
+      void Promise.resolve().then(() => setAuth({ email: null, loading: false }));
       return;
     }
 
-    supabase.auth.getUser().then(({ data }) => {
+    void supabase.auth.getUser().then(({ data }) => {
       setAuth({ email: data.user?.email ?? null, loading: false });
     });
 
@@ -42,32 +42,27 @@ export default function AuthNav() {
   };
 
   if (auth.loading) {
-    return <span className="px-3 py-2 text-xs text-zinc-700">Auth...</span>;
+    return <span className="text-[10px] tracking-[0.12em] text-[var(--ri-muted)]">…</span>;
   }
 
   if (auth.email) {
     return (
-      <div className="flex items-center gap-2">
-        <span className="hidden text-xs text-zinc-700 md:inline">{auth.email}</span>
-        <button
-          type="button"
-          onClick={signOut}
-          className="rounded-full px-4 py-2 text-sm font-medium text-zinc-800 transition hover:bg-zinc-100 hover:text-zinc-950"
-        >
-          Logout
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={() => void signOut()}
+        className="text-[10px] uppercase tracking-[0.14em] text-[var(--ri-muted)] transition hover:text-[var(--ri-accent)]"
+      >
+        Logout
+      </button>
     );
   }
 
   return (
-    <>
-      <Link href="/login" className="rounded-full px-4 py-2 text-sm font-medium text-zinc-800 transition hover:bg-zinc-100 hover:text-zinc-950">
-        Login
-      </Link>
-      <Link href="/signup" className="rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700">
-        Sign Up
-      </Link>
-    </>
+    <Link
+      href="/login"
+      className="text-[10px] uppercase tracking-[0.14em] text-[var(--ri-muted)] transition hover:text-[var(--ri-accent)]"
+    >
+      Login
+    </Link>
   );
 }

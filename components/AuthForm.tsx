@@ -1,8 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
+import RiButton from "@/components/ui/RiButton";
+import RiInput from "@/components/ui/RiInput";
+import RiLink from "@/components/ui/RiLink";
+import RiPageTitle from "@/components/ui/RiPageTitle";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type AuthMode = "signup" | "login";
@@ -37,76 +40,62 @@ export default function AuthForm({ mode }: AuthFormProps) {
           },
         });
         if (error) throw error;
-        setMessage("確認メールを送信しました。メールのリンクを開くとログインされます。");
+        setMessage("Check your email to confirm your account.");
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        setMessage("ログインしました。Create で下書き保存できます。");
         router.push("/create");
         router.refresh();
       }
     } catch (error) {
       const detail = error instanceof Error ? error.message : "Unknown error";
-      setMessage(`認証に失敗しました: ${detail}`);
+      setMessage(detail);
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <section className="mx-auto max-w-lg space-y-6">
-      <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-semibold text-zinc-900">{title}</h1>
-        <p className="mt-2 text-sm text-zinc-800">Supabase Auth でメールアドレス認証を行います。</p>
-      </div>
+    <div className="flex flex-1 flex-col">
+      <RiPageTitle subtitle="Email sign-in to save your inscapes.">{title}</RiPageTitle>
 
-      <form onSubmit={onSubmit} className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-        <div className="space-y-4">
-          <div>
-            <label className="mb-1 block text-sm font-semibold text-zinc-950">Email</label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-xl border border-zinc-300 px-4 py-3 text-sm text-zinc-900 outline-none focus:border-zinc-900"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-semibold text-zinc-950">Password</label>
-            <input
-              type="password"
-              required
-              minLength={8}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-xl border border-zinc-300 px-4 py-3 text-sm text-zinc-900 outline-none focus:border-zinc-900"
-            />
-          </div>
-        </div>
+      <form onSubmit={onSubmit} className="mt-4 space-y-8">
+        <RiInput
+          label="Email"
+          type="email"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          autoComplete="email"
+        />
+        <RiInput
+          label="Password"
+          type="password"
+          required
+          minLength={8}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          autoComplete={mode === "signup" ? "new-password" : "current-password"}
+        />
 
-        <button
-          type="submit"
-          disabled={isLoading}
-          className="mt-6 inline-flex rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-500"
-        >
-          {isLoading ? "Processing..." : mode === "signup" ? "Create account" : "Login"}
-        </button>
+        <RiButton type="submit" variant="primary" disabled={isLoading} className="mt-4">
+          {isLoading ? "…" : mode === "signup" ? "Create account" : "Login"}
+        </RiButton>
 
-        {message ? <p className="mt-4 text-sm text-zinc-900">{message}</p> : null}
+        {message ? <p className="text-sm text-[var(--ri-muted)]">{message}</p> : null}
 
-        <p className="mt-4 text-sm text-zinc-800">
+        <p className="text-sm text-[var(--ri-muted)]">
           {mode === "signup" ? (
             <>
-              すでにアカウントがある場合は <Link href="/login" className="font-medium underline underline-offset-2">Login</Link>
+              Already have an account? <RiLink href="/login">Login</RiLink>
             </>
           ) : (
             <>
-              初めての場合は <Link href="/signup" className="font-medium underline underline-offset-2">Sign up</Link>
+              New here? <RiLink href="/signup">Sign up</RiLink>
             </>
           )}
         </p>
       </form>
-    </section>
+    </div>
   );
 }

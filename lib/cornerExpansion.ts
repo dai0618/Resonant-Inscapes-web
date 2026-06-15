@@ -5,7 +5,70 @@ export type CornerSeed = {
   tags: string[];
   corePrompt: string;
   negativeTags: string[];
+  /** Visual scene / place families for this quadrant (not bilinear-blended; used for per-cell diversity). */
+  sceneFamilies: string[];
+  colorPalette: string[];
+  lightingTags: string[];
+  textureTags: string[];
 };
+
+const DEFAULT_SCENE_FAMILIES: Record<QuadrantKey, string[]> = {
+  highValenceHighArousal: [
+    "festival lights and crowd energy",
+    "bright neon city at night",
+    "colorful sunset sky with clouds",
+    "dance floor reflections",
+    "fireworks over water",
+    "sunlit busy street market",
+    "dynamic abstract color ribbons",
+  ],
+  highValenceLowArousal: [
+    "calm lake or seaside horizon",
+    "sunlit bedroom with window light",
+    "quiet meadow and soft grass",
+    "nostalgic small-town street",
+    "soft pastel sky and clouds",
+    "garden path with flowers",
+    "warm interior reading nook",
+  ],
+  lowValenceHighArousal: [
+    "stormy sea and crashing waves",
+    "distorted urban reflections",
+    "dark tangled forest edge",
+    "industrial hall and metal structures",
+    "sharp shadow corridors",
+    "emergency lights in rain",
+    "chaotic abstract fractured forms",
+  ],
+  lowValenceLowArousal: [
+    "empty wet street at night",
+    "foggy distant hills",
+    "dim sparse room",
+    "rain-streaked window view",
+    "abandoned station platform",
+    "winter field under grey sky",
+    "distant city lights through haze",
+  ],
+};
+
+function tokenizeExtraScenes(quad: QuadrantInput): string[] {
+  const parts = [quad.place, quad.userInput]
+    .filter(Boolean)
+    .flatMap((s) => s.split(/[,、]/))
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 3 && t.length < 80);
+  return [...new Set(parts.map((t) => t.toLowerCase()))].slice(0, 4);
+}
+
+function splitToTags(field: string, fallback: string[]): string[] {
+  if (!field?.trim()) return [...fallback];
+  const parts = field
+    .split(/[,、]/)
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)
+    .slice(0, 8);
+  return parts.length ? parts : [...fallback];
+}
 
 export const QUADRANT_KEYS: QuadrantKey[] = [
   "highValenceHighArousal",
@@ -51,7 +114,7 @@ function uniquePush(arr: string[], value: string, max: number) {
 }
 
 /** Blend tags from corners using weights (deterministic, English-oriented). */
-function blendTags(
+export function blendTags(
   weights: Record<QuadrantKey, number>,
   seeds: Record<QuadrantKey, CornerSeed>,
   visualStyle: string,
@@ -76,7 +139,7 @@ function blendTags(
   return out.length ? out : ["cinematic", "abstract", "mood-driven"];
 }
 
-function blendNegativeTags(weights: Record<QuadrantKey, number>, seeds: Record<QuadrantKey, CornerSeed>): string[] {
+export function blendNegativeTags(weights: Record<QuadrantKey, number>, seeds: Record<QuadrantKey, CornerSeed>): string[] {
   const out: string[] = [];
   for (const { k, w } of QUADRANT_KEYS.map((key) => ({ k: key, w: weights[key] })).sort((a, b) => b.w - a.w)) {
     if (w < 0.12) continue;
@@ -104,7 +167,7 @@ function blendPrompt(weights: Record<QuadrantKey, number>, seeds: Record<Quadran
 /** Local English-ish seeds when OpenAI is unavailable (may still contain non-English if user typed JP). */
 export function localCornerSeedsFromQuadrants(input: PromptGenerationRequest): Record<QuadrantKey, CornerSeed> {
   const style = input.visualStyle || "cinematic";
-  const mk = (quad: QuadrantInput): CornerSeed => {
+  const mk = (quad: QuadrantInput, key: QuadrantKey): CornerSeed => {
     const tags = [
       style,
       quad.color,
@@ -131,18 +194,24 @@ export function localCornerSeedsFromQuadrants(input: PromptGenerationRequest): R
       .join(", ")
       .slice(0, 280);
 
+    const sceneFamilies = [...new Set([...DEFAULT_SCENE_FAMILIES[key], ...tokenizeExtraScenes(quad)])].slice(0, 12);
+
     return {
       tags: tags.length ? tags : [style, "abstract", "music visualization"],
       corePrompt: corePrompt || `${style} abstract mood, soft continuity across VA space.`,
       negativeTags: splitAvoid(quad.avoid),
+      sceneFamilies: sceneFamilies.length ? sceneFamilies : [...DEFAULT_SCENE_FAMILIES[key]],
+      colorPalette: splitToTags(quad.color, ["muted palette", "balanced tones"]),
+      lightingTags: splitToTags(quad.lighting, ["soft ambient light"]),
+      textureTags: splitToTags(quad.texture, ["subtle film grain"]),
     };
   };
 
   return {
-    highValenceHighArousal: mk(input.quadrants.highValenceHighArousal),
-    highValenceLowArousal: mk(input.quadrants.highValenceLowArousal),
-    lowValenceHighArousal: mk(input.quadrants.lowValenceHighArousal),
-    lowValenceLowArousal: mk(input.quadrants.lowValenceLowArousal),
+    highValenceHighArousal: mk(input.quadrants.highValenceHighArousal, "highValenceHighArousal"),
+    highValenceLowArousal: mk(input.quadrants.highValenceLowArousal, "highValenceLowArousal"),
+    lowValenceHighArousal: mk(input.quadrants.lowValenceHighArousal, "lowValenceHighArousal"),
+    lowValenceLowArousal: mk(input.quadrants.lowValenceLowArousal, "lowValenceLowArousal"),
   };
 }
 

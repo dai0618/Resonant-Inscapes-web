@@ -2,24 +2,25 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import RiPageTitle from "@/components/ui/RiPageTitle";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export default function AuthCallbackPage() {
   const router = useRouter();
-  const [message, setMessage] = useState("認証状態を確認しています...");
+  const [message, setMessage] = useState("Confirming sign-in…");
 
   useEffect(() => {
     let isMounted = true;
     const resolve = async () => {
       const supabase = getSupabaseBrowserClient();
       if (!supabase) {
-        if (isMounted) setMessage("Supabase 設定が見つかりません。");
+        if (isMounted) setMessage("Supabase is not configured.");
         return;
       }
 
       const { data, error } = await supabase.auth.getSession();
       if (error) {
-        if (isMounted) setMessage(`認証に失敗しました: ${error.message}`);
+        if (isMounted) setMessage(error.message);
         return;
       }
 
@@ -27,20 +28,20 @@ export default function AuthCallbackPage() {
         router.replace("/create");
         router.refresh();
       } else if (isMounted) {
-        setMessage("セッションが作成されませんでした。ログイン画面から再試行してください。");
+        setMessage("No session created. Try signing in again.");
       }
     };
 
-    resolve();
+    void resolve();
     return () => {
       isMounted = false;
     };
   }, [router]);
 
   return (
-    <section className="mx-auto max-w-lg rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-      <h1 className="text-2xl font-semibold text-zinc-900">Auth Callback</h1>
-      <p className="mt-2 text-sm text-zinc-800">{message}</p>
-    </section>
+    <div className="flex flex-1 flex-col">
+      <RiPageTitle>Signing in</RiPageTitle>
+      <p className="text-sm text-[var(--ri-muted)]">{message}</p>
+    </div>
   );
 }

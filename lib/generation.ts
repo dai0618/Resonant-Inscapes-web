@@ -1,8 +1,9 @@
-import { expandGridFromCornerSeeds, localCornerSeedsFromQuadrants } from "@/lib/cornerExpansion";
+import { localCornerSeedsFromQuadrants } from "@/lib/cornerExpansion";
+import { generateDiverseGridFromCornerSeeds } from "@/lib/diverseGridGeneration";
 import { PromptGenerationRequest, PromptPoint } from "@/lib/types";
 
-/** Mock / offline: local seeds + bilinear expansion to 100 points (fast). */
+/** Mock / offline: local seeds + diverse scene distribution (deterministic). */
 export function generateMockGridPoints(input: PromptGenerationRequest): PromptPoint[] {
   const seeds = localCornerSeedsFromQuadrants(input);
-  return expandGridFromCornerSeeds(seeds, input.visualStyle || "cinematic");
+  return generateDiverseGridFromCornerSeeds(seeds, input);
 }

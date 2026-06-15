@@ -1,5 +1,7 @@
-import PromptListCard from "@/components/PromptListCard";
+import Link from "next/link";
 import DiscoverCreatedSection from "@/components/DiscoverCreatedSection";
+import RiListItem from "@/components/ui/RiListItem";
+import RiPageTitle from "@/components/ui/RiPageTitle";
 import { promptLists as mockPromptLists } from "@/lib/mock-data";
 import { getPublicPromptLists } from "@/lib/promptLists";
 
@@ -14,48 +16,35 @@ export default async function Home() {
   }
 
   return (
-    <section className="space-y-8">
-      <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-800">Discover</p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-zinc-900">Prompt Lists for Music Visualization</h1>
-        <p className="mt-3 max-w-3xl text-sm text-zinc-800">
-          Resonant Inscapesは、Valence/Arousal座標に対応したPrompt Listを作成・共有・ダウンロードするためのプラットフォームです。
-        </p>
-      </div>
+    <div className="flex flex-1 flex-col pb-8">
+      <RiPageTitle subtitle="Listen. Choose images that resonate. A prompt map emerges.">
+        Resonant Inscapes
+      </RiPageTitle>
 
-      <div className="space-y-8">
-        <section>
-          <h2 className="mb-4 text-lg font-semibold text-zinc-900">My Drafts</h2>
-          <DiscoverCreatedSection />
-        </section>
+      <Link
+        href="/create"
+        className="mb-16 block border border-[var(--ri-accent)]/40 py-4 text-center text-xs uppercase tracking-[0.15em] text-[var(--ri-accent)] transition hover:border-[var(--ri-accent)] hover:bg-[var(--ri-accent-dim)]"
+      >
+        Start
+      </Link>
 
-        <section>
-          <h2 className="mb-4 text-lg font-semibold text-zinc-900">Popular</h2>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <section className="mb-12">
+        <p className="mb-4 text-[10px] uppercase tracking-[0.2em] text-[var(--ri-muted)]">Your drafts</p>
+        <DiscoverCreatedSection />
+      </section>
+
+      <section>
+        <p className="mb-2 text-[10px] uppercase tracking-[0.2em] text-[var(--ri-muted)]">Public atlases</p>
+        {lists.length === 0 ? (
+          <p className="py-8 text-sm text-[var(--ri-muted)]">No public atlases yet.</p>
+        ) : (
+          <div>
             {lists.map((list) => (
-              <PromptListCard key={`popular-${list.id}`} list={list} sectionLabel="Popular" />
+              <RiListItem key={list.id} list={list} meta={list.authorName} />
             ))}
           </div>
-        </section>
-
-        <section>
-          <h2 className="mb-4 text-lg font-semibold text-zinc-900">New</h2>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {[...lists].reverse().map((list) => (
-              <PromptListCard key={`new-${list.id}`} list={list} sectionLabel="New" />
-            ))}
-          </div>
-        </section>
-
-        <section>
-          <h2 className="mb-4 text-lg font-semibold text-zinc-900">By Category</h2>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {lists.map((list) => (
-              <PromptListCard key={`category-${list.id}`} list={list} sectionLabel={list.template} />
-            ))}
-          </div>
-        </section>
-      </div>
-    </section>
+        )}
+      </section>
+    </div>
   );
 }

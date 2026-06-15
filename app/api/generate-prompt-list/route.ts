@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
-import { QUADRANT_KEYS, CornerSeed, expandGridFromCornerSeeds, localCornerSeedsFromQuadrants } from "@/lib/cornerExpansion";
+import { QUADRANT_KEYS, CornerSeed, localCornerSeedsFromQuadrants } from "@/lib/cornerExpansion";
+import { generateDiverseGridFromCornerSeeds } from "@/lib/diverseGridGeneration";
 import { VA_GRID_SIZE } from "@/lib/constants";
 import { generateMockGridPoints } from "@/lib/generation";
 import { generateHundredPointsWithLlm } from "@/lib/llmHundredPoints";
@@ -17,6 +18,14 @@ function extractJsonFromAssistantText(text: string): unknown {
   return JSON.parse(candidate);
 }
 
+function mergeStringArray(remote: unknown, local: string[], minRemote: number, max: number): string[] {
+  const r = Array.isArray(remote)
+    ? [...new Set(remote.map((x) => String(x).toLowerCase().trim()).filter(Boolean))]
+    : [];
+  if (r.length >= minRemote) return r.slice(0, max);
+  return [...new Set([...r, ...local])].slice(0, max);
+}
+
 function buildCornerOnlySystemPrompt() {
   return `You help build a Valence–Arousal (VA) mood map for music-driven image prompts.
 
@@ -29,10 +38,14 @@ Conceptual anchors (centered VA, before mapping to the app grid):
 The app maps these to a [0,1]×[0,1] grid. You output ONLY the four corner "cores" in this response; a separate step will ask the model to write all 100 cell prompts using these anchors.
 
 Rules:
-- User text may be Japanese, English, or mixed. You MUST output only English in tags, corePrompt, and negativeTags.
-- tags: 5–8 short Stable-Diffusion-style English keywords per corner.
+- User text may be Japanese, English, or mixed. You MUST output only English in tags, corePrompt, negativeTags, sceneFamilies, colorPalette, lightingTags, textureTags.
+- tags: 5–8 short Stable-Diffusion-style English keywords per corner (mood / atmosphere).
 - corePrompt: ONE tight English line per corner (not a chatty paragraph). Reflect listening notes + color + lighting + place + texture.
 - negativeTags: 3–8 English terms per corner; include "avoid" ideas and contradictory styles where relevant.
+- sceneFamilies: 6–10 DISTINCT short English phrases per corner describing different scene / place / setting types that fit this quadrant emotionally. These must NOT be simple paraphrases of one scene — offer real variety (e.g. water vs interior vs sky vs street).
+- colorPalette: 4–8 English color / palette phrases per corner.
+- lightingTags: 4–8 English lighting descriptors per corner.
+- textureTags: 4–8 English texture / material descriptors per corner.
 
 Return a single JSON object (no markdown). Shape:
 {
@@ -41,10 +54,10 @@ Return a single JSON object (no markdown). Shape:
   "targetModel": string,
   "template": string,
   "corners": {
-    "highValenceHighArousal": { "tags": string[], "corePrompt": string, "negativeTags": string[] },
-    "highValenceLowArousal": { "tags": string[], "corePrompt": string, "negativeTags": string[] },
-    "lowValenceHighArousal": { "tags": string[], "corePrompt": string, "negativeTags": string[] },
-    "lowValenceLowArousal": { "tags": string[], "corePrompt": string, "negativeTags": string[] }
+    "highValenceHighArousal": { "tags": string[], "corePrompt": string, "negativeTags": string[], "sceneFamilies": string[], "colorPalette": string[], "lightingTags": string[], "textureTags": string[] },
+    "highValenceLowArousal": { ... same fields ... },
+    "lowValenceHighArousal": { ... },
+    "lowValenceLowArousal": { ... }
   }
 }`;
 }
@@ -63,6 +76,10 @@ function mergeCornerSeeds(
       negativeTags: remote?.negativeTags?.length
         ? remote.negativeTags.map((t) => String(t).toLowerCase().trim())
         : L.negativeTags,
+      sceneFamilies: mergeStringArray(remote?.sceneFamilies, L.sceneFamilies, 3, 14),
+      colorPalette: mergeStringArray(remote?.colorPalette, L.colorPalette, 2, 10),
+      lightingTags: mergeStringArray(remote?.lightingTags, L.lightingTags, 2, 10),
+      textureTags: mergeStringArray(remote?.textureTags, L.textureTags, 2, 10),
     };
   }
   return out;
@@ -78,10 +95,10 @@ export async function POST(request: Request) {
     const apiKey = process.env.OPENAI_API_KEY;
 
     if (!apiKey) {
-      const points = expandGridFromCornerSeeds(localSeeds, normalizedInput.visualStyle || "cinematic");
+      const points = generateDiverseGridFromCornerSeeds(localSeeds, normalizedInput);
       return NextResponse.json({
         fallback: true,
-        message: "OpenAI generation failed. Using mock data.",
+        message: "OpenAI API key not set. Generated 100 points with local diverse scene distribution.",
         data: {
           title: body.title,
           description: body.description,
@@ -90,6 +107,7 @@ export async function POST(request: Request) {
           gridSize: VA_GRID_SIZE,
           points,
         },
+        generationMode: "diverse_interpolate",
       });
     }
 
@@ -98,7 +116,7 @@ export async function POST(request: Request) {
     const completion = await client.chat.completions.create({
       model: CHAT_MODEL,
       temperature: 0.35,
-      max_tokens: 900,
+      max_tokens: 2000,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: buildCornerOnlySystemPrompt() },
@@ -128,13 +146,13 @@ export async function POST(request: Request) {
     const merged = mergeCornerSeeds(parsed?.corners, localSeeds);
 
     let points;
-    let generationMode: "llm-100" | "interpolate" = "llm-100";
+    let generationMode: "llm-100" | "diverse_interpolate" = "llm-100";
     try {
       points = await generateHundredPointsWithLlm(client, CHAT_MODEL, merged, normalizedInput);
     } catch (hundredError) {
-      console.error("100-point LLM generation failed, using bilinear interpolation:", hundredError);
-      points = expandGridFromCornerSeeds(merged, normalizedInput.visualStyle || "cinematic");
-      generationMode = "interpolate";
+      console.error("100-point LLM generation failed, using diverse local generation:", hundredError);
+      points = generateDiverseGridFromCornerSeeds(merged, normalizedInput);
+      generationMode = "diverse_interpolate";
     }
 
     const data = {
@@ -180,6 +198,7 @@ export async function POST(request: Request) {
         template: fallbackInput.visualStyle,
         points: generateMockGridPoints({ ...fallbackInput, quadrants: quadrantFallback ?? fallbackInput.quadrants }),
       },
+      generationMode: "diverse_interpolate",
     });
   }
 }

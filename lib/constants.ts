@@ -5,3 +5,6 @@ export const VA_GRID_VALUES = Array.from({ length: VA_GRID_SIZE }, (_, i) =>
 );
 
 export const VA_EXPECTED_POINT_COUNT = VA_GRID_SIZE * VA_GRID_SIZE;
+
+/** Generated swipe / prompt images are 512×512 px. */
+export const IMAGE_CARD_SIZE = 512;

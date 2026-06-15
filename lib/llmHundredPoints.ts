@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { VA_EXPECTED_POINT_COUNT, VA_GRID_VALUES } from "@/lib/constants";
-import { CornerSeed, QUADRANT_KEYS, expandGridFromCornerSeeds } from "@/lib/cornerExpansion";
+import { CornerSeed, QUADRANT_KEYS } from "@/lib/cornerExpansion";
+import { generateDiverseGridFromCornerSeeds, postProcessDedupePoints } from "@/lib/diverseGridGeneration";
 import { PromptPoint, PromptGenerationRequest, QuadrantKey } from "@/lib/types";
 
 export type RawGridPoint = {
@@ -10,6 +11,7 @@ export type RawGridPoint = {
   tags: string[];
   negativeTags: string[];
   prompt: string;
+  sceneFamily?: string;
 };
 
 const HALF = 5;
@@ -32,7 +34,7 @@ function cellsForRegion(xi0: number, xi1: number, yi0: number, yi1: number): { v
   const out: { valence: number; arousal: number }[] = [];
   for (let yi = yi0; yi <= yi1; yi += 1) {
     for (let xi = xi0; xi <= xi1; xi += 1) {
-      out.push({ valence: VA_GRID_VALUES[xi], arousal: VA_GRID_VALUES[yi] });
+      out.push({ valence: VA_GRID_VALUES[xi]!, arousal: VA_GRID_VALUES[yi]! });
     }
   }
   return out;
@@ -48,16 +50,27 @@ function extractJsonFromAssistantText(text: string): unknown {
 function quarterSystemPrompt() {
   return `You are filling part of a 10×10 Valence–Arousal (VA) mood map for music visualization and image generation.
 
+Generate a diverse VA prompt map. Keep emotional continuity across neighboring VA points.
+Do NOT make every prompt a simple interpolation of the four corners.
+Vary scene, place, subject, and composition across the grid.
+Use the four quadrant cores (tags, corePrompt, negativeTags, sceneFamilies, colorPalette, lightingTags, textureTags) as emotional anchors.
+Around each anchor, create multiple scene variations.
+Adjacent points should be emotionally related, but visually not identical.
+Avoid repeating the same scene noun or the same opening clause too many times across your 25 cells.
+Each point should feel like a distinct visual seed.
+Maintain a coherent world style if visualStyle is provided.
+
 You will receive:
-- English "corner anchors" for all four VA corners (from sample-listening notes).
-- A fixed list of exactly 25 (valence, arousal) pairs — you MUST output one grid point per pair, using those EXACT numbers (3 decimal places as given).
+- English corner anchors for all four VA corners.
+- A fixed list of exactly 25 (valence, arousal) pairs — output one grid point per pair using those EXACT numbers (3 decimal places as given).
 - overall visualStyle / title context.
 
 For EVERY one of the 25 cells you MUST write:
 - moodLabel: short English
-- tags: 4–8 English SD-style keywords (unique per cell where possible)
+- tags: 4–8 English SD-style keywords (mood + color + lighting; unique per cell where possible)
 - negativeTags: 3–8 English terms
-- prompt: ONE concise English image prompt line for THIS cell only. **Each cell needs its own wording** — do not duplicate the same sentence across cells. Neighboring cells in valence/arousal space should feel like small steps (similar but not identical).
+- sceneFamily: ONE short English phrase naming the scene/place family for this cell (pick from or creatively extend the quadrant sceneFamilies; must differ across cells where VA allows)
+- prompt: ONE concise English image prompt line. Structure: mood tags, scene/place, lighting, color, texture, composition, quality — emotionally continuous with neighbors but NOT copy-pasted.
 
 Output a single JSON object: { "points": [ ... ] } with exactly 25 items. No markdown. All strings English.`;
 }
@@ -79,10 +92,11 @@ function mapOneRawPoint(p: RawGridPoint, idSuffix: string): PromptPoint {
     tags: Array.isArray(p.tags) ? p.tags.map(String) : [],
     negativeTags: Array.isArray(p.negativeTags) ? p.negativeTags.map(String) : [],
     prompt: String(p.prompt ?? ""),
+    sceneFamily: p.sceneFamily != null && String(p.sceneFamily).trim() ? String(p.sceneFamily).trim() : undefined,
   };
 }
 
-/** If the model drops a cell or duplicates keys, fill gaps from bilinear fallback (same VA coords). */
+/** If the model drops a cell or duplicates keys, fill gaps from diverse local generator (same VA coords). */
 function mergeQuarterWithFallback(
   rawPoints: RawGridPoint[],
   cells: { valence: number; arousal: number }[],
@@ -90,11 +104,9 @@ function mergeQuarterWithFallback(
   input: PromptGenerationRequest,
   regionId: string,
 ): PromptPoint[] {
+  const diverseGrid = generateDiverseGridFromCornerSeeds(cornerSeeds, input);
   const fallbackByKey = new Map(
-    expandGridFromCornerSeeds(cornerSeeds, input.visualStyle || "cinematic").map((p) => [
-      `${p.valence.toFixed(3)},${p.arousal.toFixed(3)}`,
-      p,
-    ]),
+    diverseGrid.map((p) => [`${p.valence.toFixed(3)},${p.arousal.toFixed(3)}`, p]),
   );
 
   const byKey = new Map<string, RawGridPoint>();
@@ -108,7 +120,7 @@ function mergeQuarterWithFallback(
 
   const out: PromptPoint[] = [];
   for (let i = 0; i < cells.length; i += 1) {
-    const c = cells[i];
+    const c = cells[i]!;
     const k = `${c.valence.toFixed(3)},${c.arousal.toFixed(3)}`;
     const raw = byKey.get(k);
     if (raw) {
@@ -119,7 +131,7 @@ function mergeQuarterWithFallback(
       out.push({
         ...fb,
         id: `pad-${regionId}-${k}`,
-        moodLabel: fb.moodLabel.includes("interpolated") ? fb.moodLabel : `${fb.moodLabel} (gap-fill)`,
+        moodLabel: fb.moodLabel.includes("gap-fill") ? fb.moodLabel : `${fb.moodLabel} (gap-fill)`,
       });
     }
   }
@@ -171,12 +183,12 @@ async function generateQuarter(
   const parsed = extractJsonFromAssistantText(text) as { points?: RawGridPoint[] };
   const pts = Array.isArray(parsed.points) ? parsed.points : [];
   if (pts.length !== cells.length) {
-    console.warn(`Quarter ${region.id}: model returned ${pts.length}/${cells.length} points; filling gaps from interpolation.`);
+    console.warn(`Quarter ${region.id}: model returned ${pts.length}/${cells.length} points; filling gaps from diverse local grid.`);
   }
   return mergeQuarterWithFallback(pts, cells, cornerSeeds, input, region.id);
 }
 
-/** LLM generates all 100 prompts (4×25 parallel). */
+/** LLM generates all 100 prompts (4×25 parallel), then dedupe / balance pass. */
 export async function generateHundredPointsWithLlm(
   client: OpenAI,
   model: string,
@@ -197,5 +209,5 @@ export async function generateHundredPointsWithLlm(
     seen.add(k);
   }
   if (seen.size !== VA_EXPECTED_POINT_COUNT) throw new Error("Incomplete VA coverage");
-  return merged;
+  return postProcessDedupePoints(merged, input);
 }

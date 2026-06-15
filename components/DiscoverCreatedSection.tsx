@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import PromptListCard from "@/components/PromptListCard";
+import RiLink from "@/components/ui/RiLink";
+import RiListItem from "@/components/ui/RiListItem";
 import { getRememberedCreatedPromptListIds } from "@/lib/createdListStorage";
 import type { PromptList } from "@/lib/types";
 
@@ -12,12 +12,17 @@ export default function DiscoverCreatedSection() {
 
   useEffect(() => {
     const ids = getRememberedCreatedPromptListIds();
+    let cancelled = false;
+
     if (ids.length === 0) {
-      setLists([]);
-      return;
+      void Promise.resolve().then(() => {
+        if (!cancelled) setLists([]);
+      });
+      return () => {
+        cancelled = true;
+      };
     }
 
-    let cancelled = false;
     fetch("/api/prompt-lists/batch", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -32,7 +37,7 @@ export default function DiscoverCreatedSection() {
       })
       .catch(() => {
         if (!cancelled) {
-          setLoadError("作成済みリストの取得に失敗しました。Supabase の設定とネットワークを確認してください。");
+          setLoadError("Could not load drafts.");
           setLists([]);
         }
       });
@@ -43,30 +48,24 @@ export default function DiscoverCreatedSection() {
   }, []);
 
   if (lists === null) {
-    return <p className="text-sm text-zinc-800">読み込み中…</p>;
+    return <p className="text-sm text-[var(--ri-muted)]">Loading…</p>;
   }
 
   if (lists.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/80 p-8 text-center">
-        <p className="text-sm text-zinc-800">
-          まだ自分の作成リストがありません。<Link href="/create" className="font-medium text-zinc-950 underline underline-offset-2">Create</Link>{" "}
-          から Save Draft すると、ここに表示されます。
-        </p>
-        {loadError ? <p className="mt-4 text-sm font-medium text-red-800">{loadError}</p> : null}
-      </div>
+      <p className="text-sm text-[var(--ri-muted)]">
+        No drafts yet. <RiLink href="/create">Start</RiLink> to create one.
+        {loadError ? <span className="mt-2 block text-xs">{loadError}</span> : null}
+      </p>
     );
   }
 
   return (
-    <div className="space-y-4">
-      {loadError ? <p className="text-sm font-medium text-red-800">{loadError}</p> : null}
-      <p className="text-sm text-zinc-800">このブラウザで作成したリスト（最大 50 件）です。</p>
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {lists.map((list) => (
-          <PromptListCard key={list.id} list={list} sectionLabel="My Draft" />
-        ))}
-      </div>
+    <div>
+      {loadError ? <p className="mb-4 text-xs text-[var(--ri-muted)]">{loadError}</p> : null}
+      {lists.map((list) => (
+        <RiListItem key={list.id} list={list} meta="Draft" />
+      ))}
     </div>
   );
 }

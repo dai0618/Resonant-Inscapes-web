@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import PromptInspector from "@/components/PromptInspector";
+import MobilePromptPanel from "@/components/inscape/MobilePromptPanel";
 import VAMap from "@/components/VAMap";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { PromptList } from "@/lib/types";
@@ -27,9 +27,7 @@ export default function PromptListDetailView({ list }: PromptListDetailViewProps
     try {
       setIsDownloading(true);
       const res = await fetch(`/api/prompt-lists/${list.id}/download`);
-      if (!res.ok) {
-        throw new Error("Download failed");
-      }
+      if (!res.ok) throw new Error("Download failed");
       const payload = await res.json();
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
@@ -54,15 +52,13 @@ export default function PromptListDetailView({ list }: PromptListDetailViewProps
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData.session?.access_token;
       if (!accessToken) {
-        setPublishMessage("公開するにはログインが必要です。");
+        setPublishMessage("Sign in to publish.");
         return;
       }
 
       const response = await fetch(`/api/prompt-lists/${list.id}/publish`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
+        headers: { Authorization: `Bearer ${accessToken}` },
       });
 
       if (!response.ok) {
@@ -71,51 +67,46 @@ export default function PromptListDetailView({ list }: PromptListDetailViewProps
       }
 
       setCurrentVisibility("public");
-      setPublishMessage("公開しました。Discover に表示されます。");
+      setPublishMessage("Published.");
     } catch (error) {
       const detail = error instanceof Error ? error.message : "Unknown error";
-      setPublishMessage(`公開に失敗しました: ${detail}`);
+      setPublishMessage(detail);
     } finally {
       setIsPublishing(false);
     }
   };
 
   return (
-    <section className="space-y-6">
-      <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-        <h1 className="text-3xl font-semibold tracking-tight text-zinc-950">{list.title}</h1>
-        <p className="mt-2 text-sm font-medium text-zinc-800">by {list.authorName}</p>
-        <p className="mt-1 text-xs font-medium uppercase tracking-[0.12em] text-zinc-700">Visibility: {currentVisibility}</p>
-        <p className="mt-4 max-w-3xl text-sm leading-relaxed text-zinc-800">{list.description}</p>
-        <div className="mt-5 flex gap-3">
-          <button
-            type="button"
-            onClick={handleDownload}
-            className="rounded-full bg-zinc-900 px-5 py-2 text-sm font-medium text-white"
-          >
-            {isDownloading ? "Downloading..." : "Download JSON"}
-          </button>
-          <Link href={`/create?remixFrom=${list.id}`} className="rounded-full bg-zinc-200 px-5 py-2 text-sm font-semibold text-zinc-950">
-            Remix
-          </Link>
-          {currentVisibility === "draft" ? (
-            <button
-              type="button"
-              onClick={handlePublish}
-              disabled={isPublishing}
-              className="rounded-full bg-emerald-700 px-5 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-emerald-500"
-            >
-              {isPublishing ? "Publishing..." : "Publish"}
-            </button>
-          ) : null}
-        </div>
-        {publishMessage ? <p className="mt-3 text-sm font-medium text-zinc-900">{publishMessage}</p> : null}
+    <div className="flex flex-1 flex-col">
+      <div className="py-6">
+        <h1 className="text-xl font-light tracking-tight text-[var(--ri-text)]">{list.title}</h1>
+        {list.authorName ? <p className="mt-2 text-xs text-[var(--ri-muted)]">{list.authorName}</p> : null}
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[1.25fr_1fr]">
-        <VAMap points={list.points} selectedPointId={selectedPointId} onSelectPoint={setSelectedPointId} />
-        <PromptInspector point={selectedPoint} />
+      <p className="mb-4 text-sm font-light tracking-[0.12em] text-[var(--ri-text)]">Resonant Inscapes Map</p>
+      <VAMap
+        variant="touch"
+        points={list.points}
+        selectedPointId={selectedPointId}
+        onSelectPoint={setSelectedPointId}
+      />
+
+      <MobilePromptPanel point={selectedPoint} />
+
+      <div className="mt-auto flex flex-wrap gap-x-6 gap-y-3 border-t border-[var(--ri-line)] pt-8 text-xs tracking-[0.1em] text-[var(--ri-muted)]">
+        <button type="button" onClick={() => void handleDownload()} disabled={isDownloading}>
+          {isDownloading ? "…" : "JSON"}
+        </button>
+        <Link href={`/create?remixFrom=${list.id}`} className="hover:text-[var(--ri-accent)]">
+          Remix
+        </Link>
+        {currentVisibility === "draft" ? (
+          <button type="button" onClick={() => void handlePublish()} disabled={isPublishing}>
+            {isPublishing ? "…" : "Publish"}
+          </button>
+        ) : null}
+        {publishMessage ? <span className="w-full text-[var(--ri-accent)]">{publishMessage}</span> : null}
       </div>
-    </section>
+    </div>
   );
 }

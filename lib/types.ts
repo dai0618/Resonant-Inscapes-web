@@ -16,6 +16,8 @@ export type PromptPoint = {
   tags: string[];
   negativeTags: string[];
   prompt: string;
+  /** Scene / place family used for diversity (not bilinear-blended across VA). */
+  sceneFamily?: string;
 };
 
 export type PromptList = {
@@ -72,3 +74,42 @@ export type PromptGenerationRequest = {
 };
 
 export type QuadrantKey = keyof PromptGenerationRequest["quadrants"];
+
+export type ImageCard = {
+  id: string;
+  valence: number;
+  arousal: number;
+  moodLabel: string;
+  sceneFamily: string;
+  tags: string[];
+  negativeTags: string[];
+  prompt: string;
+  imagePath: string;
+  seed?: number;
+  model?: string;
+};
+
+export type SwipeResponse = {
+  id: string;
+  cardId: string;
+  trackId: string;
+  valence: number;
+  arousal: number;
+  sceneFamily: string;
+  tags: string[];
+  negativeTags: string[];
+  liked: boolean;
+  timestamp: number;
+};
+
+export type ResonantProfile = {
+  preferredValence: number;
+  preferredArousal: number;
+  valenceSpread: number;
+  arousalSpread: number;
+  sceneFamilyWeights: Record<string, number>;
+  tagWeights: Record<string, number>;
+  negativeTagWeights: Record<string, number>;
+  responseCount: number;
+};
+

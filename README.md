@@ -64,11 +64,13 @@ npm run dev
 ## OpenAI Generation
 
 - API Route: `POST /api/generate-prompt-list`
-- 役割: `/create` から4象限入力を受け取り、10x10 (100 points) のPrompt ListをJSONで生成
-- 4つのサンプル音源は、VA空間4象限の「核」を作るために使います
-- ChatGPT APIは、その核から周辺VA地点のプロンプトを予測・補間するために使います
-- 失敗時: `OpenAI generation failed. Using mock data.` を返してmock生成にフォールバック
-- 設計方針: LLMは作成時のみ使用し、リアルタイム再生時には保存済み100-point Prompt Listのみ参照します
+- 役割: `/create` から4象限入力を受け取り、10×10（100点）の Prompt List を JSON で返す
+- **100点は単純な四隅の双一次補間だけではない**: mood / color / lighting / texture は VA 上で四隅から重み付きブレンドしつつ、**scene / place / subject / composition** は象限ごとの `sceneFamilies` から決定的（seeded）に分散させ、同じ風景語の連発を避ける
+- **LLM あり**: ① 小さな JSON で四隅を英語化（`sceneFamilies`, `colorPalette`, `lightingTags`, `textureTags` を含む）② 4ブロック×25点並列で各セルの `prompt` / `sceneFamily` 等を生成。失敗時は `generationMode: "diverse_interpolate"` でローカル多様化グリッドに切り替え
+- **API キーなし**: ローカル四隅シード + 既定 `sceneFamilies` とユーザー `place` 等から **`diverse_interpolate`** 相当の 100 点を生成（`lib/diverseGridGeneration.ts`）
+- 4つのサンプル音源は、VA 四象限の「核」を作るための参考としてフォームに使います
+- 失敗時（例外）: mock 相当のフォールバック応答（多様化グリッドを含む）
+- 設計方針: LLM は作成時のみ。再生時は保存済み 100 点のみ参照
 
 ## Sample Audio Placement
 
